@@ -85,10 +85,8 @@ resource "google_project_iam_binding" "cloudbuild_storage_access" {
 resource "google_cloudbuild_trigger" "flask_build_trigger" {
   name        = "flask-app-build-trigger"
   location    = "global"
-}
 
-
-github {
+  github {
     owner = "StunnerMnM7"
     name  = "inft1210"
     push {
