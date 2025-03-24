@@ -81,10 +81,7 @@ resource "google_project_iam_binding" "cloudbuild_storage_access" {
   ]
 }
 
-# Create Cloud Build Trigger for Continuous Deployment
-resource "google_cloudbuild_trigger" "flask_build_trigger" {
-  name        = "flask-app-trigger"
-  location    = "global"
+
 
   github {
     owner = "StunnerMnM7"
