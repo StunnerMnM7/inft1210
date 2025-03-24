@@ -88,7 +88,7 @@ resource "google_cloudbuild_trigger" "flask_build_trigger" {
 }
 
 
-  github {
+github {
     owner = "StunnerMnM7"
     name  = "inft1210"
     push {
@@ -96,7 +96,7 @@ resource "google_cloudbuild_trigger" "flask_build_trigger" {
     }
   }
 
-  build {
+build {
     logs_bucket = google_storage_bucket.cloudbuild_logs.url
 
     step {
