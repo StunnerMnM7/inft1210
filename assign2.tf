@@ -3,26 +3,42 @@ provider "google" {
   region  = "us-central1"
 }
 
+# Create VPC Network
 resource "google_compute_network" "vpc_network" {
-  name = "mihir-assign2-vpc" 
+  name = "assign2-vpc"
 }
 
+# Create Public Subnet
 resource "google_compute_subnetwork" "public_subnet" {
-  name          = "mihir-public-subnet"  
+  name          = "public-subnet"
+  network       = google_compute_network.vpc_network.self_link
+  region        = "us-central1"
   ip_cidr_range = "10.0.1.0/24"
-  region        = "us-central1"
-  network       = google_compute_network.vpc_network.id
 }
 
+# Create Private Subnet
 resource "google_compute_subnetwork" "private_subnet" {
-  name          = "mihir-private-subnet"  
-  ip_cidr_range = "10.0.2.0/24"
-  region        = "us-central1"
-  network       = google_compute_network.vpc_network.id
+  name                     = "private-subnet"
+  network                  = google_compute_network.vpc_network.self_link
+  region                   = "us-central1"
+  ip_cidr_range            = "10.0.2.0/24"
+  private_ip_google_access = true
 }
 
+# Create Firewall Rule for HTTP access on port 5000
+resource "google_compute_firewall" "allow_http" {
+  name    = "allow-http"
+  network = google_compute_network.vpc_network.self_link
+  allow {
+    protocol = "tcp"
+    ports    = ["5000"]
+  }
+  source_ranges = ["0.0.0.0/0"]
+}
+
+# Create Compute Engine Instance for Flask App
 resource "google_compute_instance" "flask_instance" {
-  name         = "mihir-app-instance"  
+  name         = "flask-app-instance"
   machine_type = "e2-small"
   zone         = "us-central1-a"
 
@@ -33,32 +49,70 @@ resource "google_compute_instance" "flask_instance" {
   }
 
   network_interface {
-    subnetwork = google_compute_subnetwork.public_subnet.id
+    network    = google_compute_network.vpc_network.self_link
+    subnetwork = google_compute_subnetwork.public_subnet.self_link
     access_config {}
   }
 
   metadata = {
-    gce-container-declaration = <<EOF
-    spec:
-      containers:
-        - name: flask-app
-          image: gcr.io/dc-cloud-451321/inft1210assign2-flask:latest
-          ports:
-            - containerPort: 5000
-    EOF
+    google-logging-enabled = "true"
   }
 
-  tags = ["mihir-flask-app"] 
+  metadata_startup_script = <<-EOT
+  #! /bin/bash
+  docker run -d -p 5000:5000 gcr.io/dc-cloud-451321/inft1210assign2-flask/inft1210assign2-flask:latest
+  EOT
 }
 
-resource "google_compute_firewall" "flask_firewall" {
-  name    = "mihir-flask-firewall" 
-  network = google_compute_network.vpc_network.id
+# Create Cloud Storage Bucket for Cloud Build Logs
+resource "google_storage_bucket" "cloudbuild_logs" {
+  name          = "cloudbuild-logs-dc-cloud-451321"
+  location      = "US"
+  force_destroy = true
+}
 
-  allow {
-    protocol = "tcp"
-    ports    = ["5000"]
+# Assign Storage Admin Role to Cloud Build
+resource "google_project_iam_binding" "cloudbuild_storage_access" {
+  project = "dc-cloud-451321"
+  role    = "roles/storage.admin"
+
+  members = [
+    "serviceAccount:$(gcloud projects describe dc-cloud-451321 --format='467886545001-compute@developer.gserviceaccount.com"
+  ]
+}
+
+# Create Cloud Build Trigger for Continuous Deployment
+resource "google_cloudbuild_trigger" "flask_build_trigger" {
+  name        = "flask-app-build-trigger"
+  description = "Triggers on code push to update the container"
+  location    = "us-central1"
+
+  github {
+    owner = "StunnerMnM7"
+    name  = "inft1210"
+    push {
+      branch = "main"
+    }
   }
 
-  source_ranges = ["0.0.0.0/0"]
+  build {
+    logs_bucket = google_storage_bucket.cloudbuild_logs.url
+
+    step {
+      name = "gcr.io/cloud-builders/docker"
+      args = ["build", "-t", "gcr.io/dc-cloud-451321/inft1210assign2-flask/inft1210assign2-flask:latest", "."]
+    }
+    step {
+      name = "gcr.io/cloud-builders/docker"
+      args = ["push", "gcr.io/dc-cloud-451321/inft1210assign2-flask/inft1210assign2-flask:latest"]
+    }
+    step {
+      name = "gcr.io/cloud-builders/gcloud"
+      args = [
+        "compute", "ssh", "flask-app-instance",
+        "--zone=us-central1-a",
+        "--command=docker stop $(docker ps -q) && docker run -d -p 5000:5000 gcr.io/dc-cloud-451321/inft1210assign2-flask/inft1210assign2-flask:latest"
+      ]
+    }
+  }
 }
