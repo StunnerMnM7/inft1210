@@ -77,7 +77,7 @@ resource "google_project_iam_binding" "cloudbuild_storage_access" {
   role    = "roles/storage.admin"
 
   members = [
-    "serviceAccount:${data.google_project.project.number}@cloudbuild.gserviceaccount.com"
+    "serviceAccount:467886545001-compute@developer.gserviceaccount.com"
   ]
 }
 
