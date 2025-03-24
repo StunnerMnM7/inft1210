@@ -1,6 +1,5 @@
 options:
   logging: CLOUD_LOGGING_ONLY
-  logs_bucket: gs://cloudbuild-logs-dc-cloud-451321  # Specify logs storage bucket
 
 steps:
   # Step 1: Build the Docker image
