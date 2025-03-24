@@ -39,7 +39,7 @@ resource "google_compute_firewall" "allow_http" {
 # Create Compute Engine Instance for Flask App
 resource "google_compute_instance" "flask_instance" {
   name         = "mihir-app-instance"
-  machine_type = "e2-small"
+  machine_type = "e2-micro"
   zone         = "us-central1-a"
 
   boot_disk {
@@ -83,9 +83,8 @@ resource "google_project_iam_binding" "cloudbuild_storage_access" {
 
 # Create Cloud Build Trigger for Continuous Deployment
 resource "google_cloudbuild_trigger" "flask_build_trigger" {
-  name        = "flask-app-build-trigger"
-  description = "Triggers on code push to update the container"
-  location    = "us-central1"
+  name        = "flask-app-trigger"
+  location    = "global"
 
   github {
     owner = "StunnerMnM7"
