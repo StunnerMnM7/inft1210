@@ -10,7 +10,7 @@ resource "google_compute_network" "vpc_network" {
 
 # Create Public Subnet
 resource "google_compute_subnetwork" "public_subnet" {
-  name          = "public-subnet"
+  name          = "mihir-public-subnet"
   network       = google_compute_network.vpc_network.self_link
   region        = "us-central1"
   ip_cidr_range = "10.0.1.0/24"
@@ -18,7 +18,7 @@ resource "google_compute_subnetwork" "public_subnet" {
 
 # Create Private Subnet
 resource "google_compute_subnetwork" "private_subnet" {
-  name                     = "private-subnet"
+  name                     = "mihir-private-subnet"
   network                  = google_compute_network.vpc_network.self_link
   region                   = "us-central1"
   ip_cidr_range            = "10.0.2.0/24"
@@ -38,7 +38,7 @@ resource "google_compute_firewall" "allow_http" {
 
 # Create Compute Engine Instance for Flask App
 resource "google_compute_instance" "flask_instance" {
-  name         = "flask-app-instance"
+  name         = "mihir-app-instance"
   machine_type = "e2-small"
   zone         = "us-central1-a"
 
