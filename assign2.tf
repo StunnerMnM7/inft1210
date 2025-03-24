@@ -5,7 +5,8 @@ provider "google" {
 
 # Create VPC Network
 resource "google_compute_network" "vpc_network" {
-  name = "assign2-vpc"
+  name                    = "assign2-vpc"
+  auto_create_subnetworks = false
 }
 
 # Create Public Subnet
@@ -25,26 +26,45 @@ resource "google_compute_subnetwork" "private_subnet" {
   private_ip_google_access = true
 }
 
-# Create Firewall Rule for HTTP access on port 5000
+# Firewall Rule to Allow HTTP Access on Port 5000
 resource "google_compute_firewall" "allow_http" {
   name    = "allow-http"
   network = google_compute_network.vpc_network.self_link
+  direction = "INGRESS"
+  priority = 1000
+  
   allow {
     protocol = "tcp"
     ports    = ["5000"]
   }
+
   source_ranges = ["0.0.0.0/0"]
 }
 
-# Create Compute Engine Instance for Flask App
-resource "google_compute_instance" "flask_instance" {
-  name         = "mihir-app-instance"
+# NAT Gateway for Private Subnet
+resource "google_compute_router" "nat_router" {
+  name    = "mihir-nat-router"
+  network = google_compute_network.vpc_network.self_link
+  region  = "us-central1"
+}
+
+resource "google_compute_router_nat" "nat_config" {
+  name                               = "mihir-nat"
+  router                             = google_compute_router.nat_router.name
+  region                             = google_compute_router.nat_router.region
+  nat_ip_allocate_option             = "AUTO_ONLY"
+  source_subnetwork_ip_ranges_to_nat = "ALL_IP_RANGES"
+}
+
+# Create Compute Engine Instance with Flask App
+resource "google_compute_instance" "flask_vm" {
+  name         = "mihir-flask-vm"
   machine_type = "e2-micro"
   zone         = "us-central1-a"
 
   boot_disk {
     initialize_params {
-      image = "cos-cloud/cos-stable"
+      image = "debian-cloud/debian-11"
     }
   }
 
@@ -54,64 +74,53 @@ resource "google_compute_instance" "flask_instance" {
     access_config {}
   }
 
-  metadata = {
-    google-logging-enabled = "true"
+  service_account {
+    email  = "467886545001-compute@developer.gserviceaccount.com"
+    scopes = ["cloud-platform"]
   }
 
   metadata_startup_script = <<-EOT
-  #! /bin/bash
-  docker run -d -p 5000:5000 gcr.io/dc-cloud-451321/inft1210assign2-flask/inft1210assign2-flask:latest
+    #!/bin/bash
+    sudo apt update -y
+    sudo apt install -y python3 python3-pip
+    pip3 install flask
+    
+    cat << EOF > /home/flask_app.py
+    from flask import Flask
+    app = Flask(__name__)
+    
+    @app.route('/')
+    def hello_cloud():
+        return 'Hello Cloud from Mihir and this is updated Hello Cloud' 
+    
+    if __name__ == "__main__":
+        app.run(host='0.0.0.0', port=5000)
+    EOF
+    
+    python3 /home/flask_app.py &
+    
+    # Authenticate with Artifact Registry
+    gcloud auth configure-docker us-east1-docker.pkg.dev
+    
+    # Pull and run the Docker container
+    docker pull us-east1-docker.pkg.dev/dc-cloud-451321/inft1210assign2-flask/inft1210assign2-flask:latest
+    docker run -d -p 5000:5000 us-east1-docker.pkg.dev/dc-cloud-451321/inft1210assign2-flask/inft1210assign2-flask:latest
   EOT
 }
 
-# Create Cloud Storage Bucket for Cloud Build Logs
-resource "google_storage_bucket" "cloudbuild_logs" {
-  name          = "cloudbuild-logs-dc-cloud-451321"
-  location      = "US"
-  force_destroy = true
+# Output Variables
+output "vm_external_ip" {
+  value = google_compute_instance.flask_vm.network_interface[0].access_config[0].nat_ip
 }
 
-# Assign Storage Admin Role to Cloud Build
-resource "google_project_iam_binding" "cloudbuild_storage_access" {
-  project = "dc-cloud-451321"
-  role    = "roles/storage.admin"
-
-  members = [
-    "serviceAccount:467886545001-compute@developer.gserviceaccount.com"
-  ]
+output "vpc_name" {
+  value = google_compute_network.vpc_network.name
 }
 
-# Create Cloud Build Trigger for Continuous Deployment
-resource "google_cloudbuild_trigger" "flask_build_trigger" {
-  name        = "flask-app-build-trigger"
-  location    = "global"
+output "public_subnet" {
+  value = google_compute_subnetwork.public_subnet.self_link
+}
 
-  github {
-    owner = "StunnerMnM7"
-    name  = "inft1210"
-    push {
-      branch = "main"
-    }
-  }
-
-build {
-    logs_bucket = google_storage_bucket.cloudbuild_logs.url
-
-    step {
-      name = "gcr.io/cloud-builders/docker"
-      args = ["build", "-t", "gcr.io/dc-cloud-451321/inft1210assign2-flask/inft1210assign2-flask:latest", "."]
-    }
-    step {
-      name = "gcr.io/cloud-builders/docker"
-      args = ["push", "gcr.io/dc-cloud-451321/inft1210assign2-flask/inft1210assign2-flask:latest"]
-    }
-    step {
-      name = "gcr.io/cloud-builders/gcloud"
-      args = [
-        "compute", "ssh", "flask-app-instance",
-        "--zone=us-central1-a",
-        "--command=docker stop $(docker ps -q) && docker run -d -p 5000:5000 gcr.io/dc-cloud-451321/inft1210assign2-flask/inft1210assign2-flask:latest"
-      ]
-    }
-  }
+output "private_subnet" {
+  value = google_compute_subnetwork.private_subnet.self_link
 }
