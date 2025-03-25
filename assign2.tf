@@ -28,7 +28,7 @@ resource "google_compute_subnetwork" "private_subnet" {
 
 # Firewall Rule to Allow HTTP Access on Port 5000
 resource "google_compute_firewall" "allow_http" {
-  name    = "allow-http"
+  name    = "allow-http-ssh"
   network = google_compute_network.vpc_network.self_link
   direction = "INGRESS"
   priority = 1000
@@ -91,7 +91,7 @@ resource "google_compute_instance" "flask_vm" {
     
     @app.route('/')
     def hello_cloud():
-        return 'Hello Cloud from Mihir and this is updated Hello Cloud' 
+        return 'Hello Cloud!' 
     
     if __name__ == "__main__":
         app.run(host='0.0.0.0', port=5000)
